@@ -225,6 +225,8 @@ export function creerServeur({ port = PORT } = {}) {
       res.end(JSON.stringify(history));
       return;
     }
+    /* Routes de l'application : le routeur est côté client. */
+    if (p === "/play" || p === "/host") p = "/index.html";
     if (p.startsWith("/assets/")) p = "/public" + p;
     const fichier = path.join(RACINE, p === "/index.html" ? "index.html" : p);
     if (!fichier.startsWith(RACINE) || !fs.existsSync(fichier) || fs.statSync(fichier).isDirectory()) {
