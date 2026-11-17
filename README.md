@@ -13,6 +13,10 @@ déterministe hérité du projet 2D.
 
 Le serveur sert la page, le bundle, les données historiques, et tient les salles en mémoire.
 
+Ne pas ouvrir `index.html` en double-clic : la page a besoin du serveur (le module JavaScript est
+refusé en `file://`, et les salles passent par le réseau). Si la page affiche « chargement du site »,
+c'est que le serveur n'est pas lancé.
+
 ## Écrans
 
 - `/host` : écran de salle. Un code PIN à quatre chiffres s'affiche, les équipes le saisissent sur leur téléphone.

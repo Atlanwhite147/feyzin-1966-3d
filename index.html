@@ -9,6 +9,11 @@
   #root{height:100%}
   canvas{display:block;touch-action:none}
   .charge{display:grid;place-items:center;height:100%;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:#948d83}
+  .panne{display:grid;place-items:center;height:100%;padding:24px;box-sizing:border-box}
+  .panne div{max-width:560px;line-height:1.6;font-size:14px}
+  .panne b{display:block;font:600 17px/1.3 Georgia,serif;color:#f0e9dc;margin-bottom:10px}
+  .panne code{display:block;margin:10px 0;padding:10px 12px;background:#0d1015;border:1px solid #2b3340;color:#c9c2b4;font:12.5px monospace;white-space:pre-wrap}
+  .panne em{color:#9aa5b3;font-style:normal;font-size:12.5px}
 </style>
 </head>
 <body>
@@ -26,7 +31,28 @@
   window.addEventListener("unhandledrejection", (e) => {
     window.__err = "promesse rejetée · " + (e.reason && e.reason.message ? e.reason.message : e.reason);
   });
+
+  /* Si le module n'a pas démarré, on explique quoi faire au lieu de laisser
+     tourner « chargement du site » indéfiniment. */
+  setTimeout(() => {
+    const racine = document.getElementById("root");
+    if (!racine || !racine.querySelector(".charge")) return;
+    const fichier = location.protocol === "file:";
+    racine.innerHTML = `
+      <div class="panne"><div>
+        <b>Le site n'a pas démarré</b>
+        ${fichier
+          ? "La page a été ouverte directement depuis le disque. Elle a besoin du serveur : le jeu, les salles et les téléphones passent par lui."
+          : "Le serveur ne répond pas, ou le fichier du programme n'a pas pu être chargé."}
+        <code>cd ~/Documents/Surete/Feyzin_1966_jeu/feyzin-3d
+npm start</code>
+        Puis ouvrez <em>http://localhost:3100/host</em> pour l'écran de salle, et <em>/play?pin=XXXX</em> sur les téléphones.
+        ${window.__err ? '<code style="border-color:#7a3a2c;color:#e08b7a">' + window.__err + "</code>" : ""}
+      </div></div>`;
+
+      racine.querySelector(".charge")?.remove();
+  }, 4000);
 </script>
-<script type="module" src="/public/app.js?v=mwki93xc"></script>
+<script type="module" src="./public/app.js?v=mwkijyme" onerror="window.__err = window.__err || 'le fichier app.js est introuvable'"></script>
 </body>
 </html>
