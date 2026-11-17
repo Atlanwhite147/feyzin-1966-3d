@@ -5,6 +5,8 @@ import { io } from "socket.io-client";
 
 let srv, port;
 
+process.env.REVELATION_MS = "500";
+
 before(async () => {
   port = 3400 + Math.floor(Math.random() * 200);
   srv = creerServeur({ port });
@@ -141,6 +143,48 @@ test("cinq phases mènent au débrief, avec une fin évaluée", async () => {
   assert.ok(dernier.debrief && dernier.debrief.lignes.length >= 5);
 
   host.close(); joueurs.forEach((j) => j.close());
+});
+
+test("un vote répété ne relance pas la diffusion", async () => {
+  const host = client();
+  const { pin } = await appel(host, "host:creer", {});
+  const j = client();
+  await appel(j, "play:rejoindre", { pin, nom: "Claire", role: "CHEF_DE_QUART" });
+  host.emit("host:avancer");
+  await attendre(200);
+
+  let emissions = 0;
+  host.on("state", () => { emissions += 1; });
+  j.emit("play:vote", { choix: 1 });
+  await attendre(150);
+  const apresPremier = emissions;
+  for (let i = 0; i < 20; i++) j.emit("play:vote", { choix: 1 });
+  await attendre(400);
+  assert.ok(emissions - apresPremier <= 1, "les votes identiques ne doivent pas faire boucler la salle, reçu " + (emissions - apresPremier));
+
+  host.close(); j.close();
+});
+
+test("après la révélation, la phase suivante démarre seule", async () => {
+  const host = client();
+  const { pin } = await appel(host, "host:creer", {});
+  let dernier = null;
+  host.on("state", (s) => { dernier = s; });
+
+  host.emit("host:avancer");
+  await attendre(200);
+  assert.equal(dernier.etat, "decision");
+
+  host.emit("host:clore");
+  await attendre(200);
+  assert.equal(dernier.etat, "revelation");
+  assert.ok(dernier.revelationDans >= 0);
+
+  await attendre(1000);
+  assert.equal(dernier.etat, "decision", "la séance doit repartir seule");
+  assert.equal(dernier.phase, 2);
+
+  host.close();
 });
 
 test("un rôle qui part libère sa place", async () => {

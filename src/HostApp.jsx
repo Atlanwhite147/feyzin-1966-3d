@@ -1,11 +1,21 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { creerSalle, rejoindreHost } from "./net/net.js";
 import { lireEtat } from "./net/useNet.js";
 import { useNet } from "./net/useNet.js";
 import HostScene from "./scene/host/HostScene.jsx";
 import HostHUD from "./ui/HostHUD.jsx";
 import { creerAudio } from "./audio/Engine.js";
+
+/* En mode secours, on force un rendu périodique sans boucle continue. */
+function Redessine() {
+  const { invalidate } = useThree();
+  useEffect(() => {
+    const t = setInterval(invalidate, 1000);
+    return () => clearInterval(t);
+  }, [invalidate]);
+  return null;
+}
 
 export default function HostApp() {
   const publicEtat = useNet((e) => e.public);
@@ -17,7 +27,11 @@ export default function HostApp() {
   const [dprMax, setDprMax] = useState(1.75);
   const [rendu, setRendu] = useState("");
   /* qualité réduite : ?lite=1, ou appareil modeste. Sert aussi aux tests headless. */
-  const lite = new URLSearchParams(window.location.search).get("lite") === "1";
+  const params = new URLSearchParams(window.location.search);
+  const lite = params.get("lite") === "1";
+  /* mode secours : on ne redessine que quelques images par seconde, ce qui garde
+     l'onglet réactif sur une machine sans GPU. */
+  const statique = params.get("statique") === "1";
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -77,6 +91,7 @@ export default function HostApp() {
     <div style={{ position: "relative", height: "100%" }}>
       <Canvas
         dpr={lite ? 0.7 : [1, dprMax]}
+        frameloop={statique ? "demand" : "always"}
         shadows={!lite}
         camera={{ position: [46, 22, 58], fov: 45, near: 0.5, far: 600 }}
         gl={{ antialias: !lite, powerPreference: "high-performance" }}
@@ -91,6 +106,7 @@ export default function HostApp() {
         }}
       >
         <HostScene etat={publicEtat} qualite={lite ? "lite" : "haute"} />
+        {statique && <Redessine />}
       </Canvas>
       <HostHUD pin={pin} etat={publicEtat} connecte={connecte} son={son} onSon={basculerSon} rendu={rendu} />
     </div>

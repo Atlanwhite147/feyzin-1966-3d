@@ -14,6 +14,11 @@ import { physics, scenario, history } from "../src/sim/data/bundle.js";
 import { newGame, jouer, resume, tension, evaluateEnding, debrief, heureDe } from "../src/sim/engine/index.js";
 
 const PORT = process.env.PORT || 3100;
+/* Délai laissé à l'animateur pour commenter le choix de la salle avant que la
+   phase suivante ne démarre d'elle-même. Réglable pour les tests. */
+const revelationMs = () => Number(process.env.REVELATION_MS || 14000);
+/* Durée d'une phase, réglable pour les répétitions rapides. */
+const dureePhase = () => Number(process.env.PHASE_DUREE || 45);
 const RACINE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export const ROLES = ["OPERATEUR_PURGE", "CHEF_DE_QUART", "POMPIERS_VIENNE_LYON", "GENDARMERIE_A7"];
@@ -49,7 +54,7 @@ function salleVide(pin) {
     joueurs: {},
     votes: {},
     debutPhase: null,
-    chrono: PHASES[0].duree,
+    chrono: dureePhase(),
     dernierChoix: null,
     journal: [],
     creee: Date.now()
@@ -147,6 +152,7 @@ function etatPublic(salle) {
     titre: PHASES[salle.phase]?.titre || "Débrief",
     etat: salle.etat,
     chrono: salle.chrono,
+    revelationDans: salle.etat === "revelation" && salle.echeance ? Math.max(0, Math.ceil((salle.echeance - Date.now()) / 1000)) : null,
     joueurs: Object.values(salle.joueurs).map((j) => ({ nom: j.nom, role: j.role })),
     votes: salle.votes,
     capteurs: c,
@@ -162,6 +168,7 @@ function etatPublic(salle) {
 
 function journaliser(salle, texte, niveau = "info") {
   salle.journal.push({ h: heureDe(salle.sim.state.clock), texte, niveau });
+  if (salle.journal.length > 40) salle.journal.splice(0, salle.journal.length - 40);
 }
 
 /* ---------- déroulé ---------- */
@@ -172,7 +179,8 @@ function lancerPhase(salle, index) {
   salle.votes = {};
   salle.dernierChoix = null;
   salle.debutPhase = Date.now();
-  salle.chrono = PHASES[index].duree;
+  salle.chrono = dureePhase();
+  salle.echeance = null;
   journaliser(salle, "Phase " + PHASES[index].n + " · " + PHASES[index].titre, "phase");
 }
 
@@ -200,6 +208,8 @@ export function fermerPhase(salle) {
     journaliser(salle, "Fin de séance : " + salle.sim.fin.titre, "fin");
   } else {
     salle.etat = "revelation";
+    /* la séance ne doit jamais rester bloquée sur un choix : elle repart seule */
+    salle.echeance = Date.now() + revelationMs();
   }
 }
 
@@ -260,7 +270,13 @@ export function creerServeur({ port = PORT } = {}) {
     fs.createReadStream(fichier).pipe(res);
   });
 
-  const io = new Server(serveur, { cors: { origin: "*" } });
+  const io = new Server(serveur, {
+    cors: { origin: "*" },
+    /* salle de projection : on tolère les micro-coupures et les onglets ralentis */
+    pingInterval: 20000,
+    pingTimeout: 30000,
+    transports: ["websocket", "polling"]
+  });
 
   io.on("connection", (socket) => {
     socket.data.role = null;
@@ -310,6 +326,9 @@ export function creerServeur({ port = PORT } = {}) {
       const role = socket.data.role;
       if (!ROLES.includes(role)) return;
       if (![0, 1, 2].includes(Number(choix))) return;
+      /* un vote identique ne change rien : on n'irradie pas un nouvel état,
+         sinon un client bavard peut faire boucler la salle. */
+      if (salle.votes[role] === Number(choix)) return;
       salle.votes[role] = Number(choix);
       io.to(salle.pin).emit("state", etatPublic(salle));
     });
@@ -350,14 +369,35 @@ export function creerServeur({ port = PORT } = {}) {
   });
 
   /* Boucle à 10 Hz : capteurs filtrés par rôle, plus un état complet pour l'écran de salle. */
+  let dernierMenage = 0;
   const boucle = setInterval(() => {
+    /* une salle sans personne depuis deux heures est oubliée */
+    if (Date.now() - dernierMenage > 60000) {
+      dernierMenage = Date.now();
+      for (const [pin, salle] of salles) {
+        const occupee = Object.keys(salle.joueurs).length > 0;
+        if (!occupee && Date.now() - (salle.vu || 0) > 2 * 3600 * 1000) salles.delete(pin);
+      }
+    }
     for (const salle of salles.values()) {
+      salle.vu = Date.now();
       const tout = capteurs(salle);
       if (salle.etat === "decision" && salle.debutPhase) {
         const ecoule = (Date.now() - salle.debutPhase) / 1000;
-        salle.chrono = Math.max(0, Math.round(PHASES[salle.phase].duree - ecoule));
+        salle.chrono = Math.max(0, Math.round(dureePhase() - ecoule));
         if (salle.chrono === 0) fermerPhase(salle);
       }
+      if (salle.etat === "revelation" && salle.echeance && Date.now() >= salle.echeance) {
+        avancer(salle);
+      }
+      /* Signature de la salle : tout changement d'état est diffusé, y compris
+         ceux que le serveur décide seul (clôture au chrono, enchaînement). */
+      const signature = salle.etat + "|" + salle.phase + "|" + JSON.stringify(salle.votes);
+      if (salle.signature !== signature) {
+        salle.signature = signature;
+        io.to(salle.pin).emit("state", etatPublic(salle));
+      }
+
       io.to(salle.pin).emit("tick", { phase: salle.phase, etat: salle.etat, chrono: salle.chrono, capteurs: tout });
       for (const [id, joueur] of Object.entries(salle.joueurs)) {
         io.to(id).emit("capteurs", capteursPour(joueur.role, tout));

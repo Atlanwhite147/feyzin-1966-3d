@@ -38,6 +38,8 @@ surimpression, et le débrief garde la scène visible derrière la chronologie.
 - Par défaut, rendu complet : ombres, Bloom, aberration chromatique, vignette, grain.
 - `?lite=1` sur `/host` : pas de post-traitement, résolution réduite, ombres coupées. Pour un vieux
   portable ou une machine sans GPU.
+- `?statique=1` : la scène n'est redessinée qu'une fois par seconde. L'onglet reste réactif même sur
+  une machine qui n'a pas de carte graphique, et les captures d'écran restent nettes.
 - La résolution de rendu baisse d'elle-même par paliers si la boucle descend sous 40 images par seconde.
 - Le compteur (touche F) affiche aussi le nom du moteur de rendu : s'il indique SwiftShader, la machine
   fait le rendu sur le processeur et les performances ne veulent rien dire.
@@ -56,6 +58,19 @@ puis démarre le serveur.
 - Sur l'offre gratuite, l'instance s'endort au bout d'un quart d'heure sans visiteur : ouvrir
   `/host` une ou deux minutes avant la séance pour la réveiller, sinon le premier chargement
   prend une trentaine de secondes.
+
+## Déroulé d'une séance
+
+L'animateur lance la première phase, puis la séance avance seule : chaque phase se clôt à la fin du
+chronomètre, le résultat du vote s'affiche, et la phase suivante démarre après le délai de commentaire.
+Les boutons « clore la phase » et « phase suivante » permettent seulement d'accélérer.
+
+Deux réglages utiles pour les répétitions, en variables d'environnement :
+
+    PHASE_DUREE=20 REVELATION_MS=5000 npm start
+
+Le premier fixe la durée d'une phase en secondes, le second le temps laissé à la salle entre le
+résultat et la phase suivante.
 
 ## Rôles et brouillard d'information
 
@@ -104,6 +119,14 @@ caméra 3D sur la scène correspondante, ce qui permet de commenter chaque déci
 
 Les joueurs automatiques servent aux répétitions : ils rejoignent les quatre rôles et votent la
 première option à chaque phase, ce qui permet de dérouler une séance entière sans téléphones.
+
+## Robustesse
+
+- La connexion se rétablit seule : après une coupure, l'écran de salle se réinscrit dans sa salle, et
+  les téléphones retrouvent leur poste.
+- Un vote identique envoyé plusieurs fois ne rediffuse pas d'état, ce qui évite toute boucle entre
+  clients bavards.
+- Les salles inoccupées depuis deux heures sont oubliées.
 
 ## Limites connues
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { clore, avancer, reremplir } from "../net/net.js";
 import QRCode from "qrcode";
+import { useNet } from "../net/useNet.js";
 
 /* Interface de salle : la scène 3D est le fond permanent, tout le reste vient
    s'y superposer en surimpression. Pas de panneaux opaques, seulement des
@@ -65,7 +66,10 @@ export default function HostHUD({ pin, etat, connecte, son, onSon, rendu }) {
   }, [pin, adresse]);
 
   const c = etat?.capteurs || {};
-  const chrono = etat?.chrono ?? 0;
+  /* le décompte vient du flux 10 Hz, plus réactif que les changements d'état */
+  const tick = useNet((e) => e.tick);
+  const chrono =
+    tick && tick.etat === etat?.etat && tick.phase + 1 === (etat?.phase ?? 0) ? tick.chrono : (etat?.chrono ?? 0);
   const phase = etat?.phase ?? 0;
   const decision = etat?.etat === "decision";
   const revelation = etat?.etat === "revelation";
@@ -177,6 +181,15 @@ export default function HostHUD({ pin, etat, connecte, son, onSon, rendu }) {
         <div className="bloc-droite">
           <div className={"compte-a-rebours" + (chrono <= 10 ? " vif" : "")}>
             {decision ? chrono + "s" : revelation ? "clos" : "—"}
+          </div>
+          <div className="chrono-note">
+            {decision
+              ? "clôture automatique à 0 s"
+              : revelation
+                ? etat?.revelationDans != null
+                  ? "phase suivante dans " + etat.revelationDans + " s"
+                  : "choix enregistré"
+                : "salle en attente"}
           </div>
           <div className="etat-ligne">
             <span className={c.a7_traffic_blocked ? "marqueur ok" : "marqueur"}>A7 {c.a7_traffic_blocked ? "coupée" : "ouverte"}</span>
@@ -356,7 +369,7 @@ function Debrief({ etat, fps }) {
           <div className="debrief-panneau-titre">ce que la salle a choisi</div>
           {d.lignes.map((l, i) => (
             <div key={i} className="debrief-choix">
-              <b>{l.heure}</b> {l.choix}
+              <b>{l.heure}</b> {l.choix.length > 132 ? l.choix.slice(0, 132) + "…" : l.choix}
               <em>{l.reel}</em>
             </div>
           ))}
@@ -391,6 +404,7 @@ const CSS = `
   .bloc-droite{text-align:right;min-width:230px}
   .compte-a-rebours{font:600 26px/1 Helvetica;letter-spacing:.04em;color:#e9e2d5;font-variant-numeric:tabular-nums}
   .compte-a-rebours.vif{color:#e0492a;text-shadow:0 0 18px rgba(224,73,42,.55)}
+  .chrono-note{margin-top:4px;font:9px/1 Helvetica;letter-spacing:.14em;text-transform:uppercase;color:#6d7885}
   .etat-ligne{margin-top:7px;display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap}
   .marqueur{font:9px/1 Helvetica;letter-spacing:.12em;text-transform:uppercase;color:#7d8896}
   .marqueur.ok{color:#9dc3aa}
@@ -448,10 +462,12 @@ const CSS = `
   .salle-vote-lignes i{position:absolute;left:0;bottom:0;height:1px;background:#b4451f;transition:width .4s ease}
 
   .commandes{display:flex;gap:22px;align-items:center;pointer-events:auto}
-  .cmd{background:none;border:none;padding:4px 0;cursor:pointer;font:9.5px/1 Helvetica;letter-spacing:.18em;
-    text-transform:uppercase;color:#7f8a97;border-bottom:1px solid transparent}
-  .cmd:hover{color:#f0e9dc;border-bottom-color:#b4451f}
-  .cmd.fort{color:#f0e9dc;border-bottom-color:#b4451f}
+  .cmd{background:rgba(8,11,16,.55);border:1px solid rgba(255,255,255,.18);padding:9px 13px;cursor:pointer;
+    font:600 9.5px/1 Helvetica;letter-spacing:.18em;text-transform:uppercase;color:#cfc8ba}
+  .cmd:hover{color:#f4ecdf;border-color:#b4451f}
+  .cmd.fort{background:#b4451f;border-color:#b4451f;color:#120b07}
+  .cmd.fort:hover{background:#c9561f;border-color:#c9561f;color:#fff}
+  .cmd.sourdine{opacity:.72}
 
   .carte{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none;
     background:radial-gradient(60% 50% at 50% 50%,rgba(3,5,8,.72) 0%,rgba(3,5,8,.2) 70%,transparent 100%);
@@ -486,7 +502,7 @@ const CSS = `
   .debrief-bilan .gros{font:600 26px/1 Helvetica;color:#f4ecdf;font-variant-numeric:tabular-nums}
   .debrief-bilan .unite{font:11px/1 Helvetica;color:#b8b1a3;letter-spacing:.04em}
   .debrief-bilan .sep{width:1px;height:16px;background:rgba(255,255,255,.16);margin:0 8px}
-  .debrief-droite{position:absolute;right:0;top:0;bottom:0;width:38%;padding:40px 30px 30px 0;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;justify-content:center}
+  .debrief-droite{position:absolute;right:0;top:0;bottom:0;width:38%;padding:40px 30px 44px 0;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;justify-content:center}
   .debrief-panneau{padding:12px 14px;border:1px solid rgba(255,255,255,.1);background:rgba(6,9,13,.62);backdrop-filter:blur(3px)}
   .debrief-panneau-titre{font:9px/1 Helvetica;letter-spacing:.18em;text-transform:uppercase;color:#6f7b8a;margin-bottom:8px}
   .barriere{display:flex;align-items:center;gap:8px;font:11px/1.5 Helvetica;color:#e08b7a}
@@ -496,7 +512,7 @@ const CSS = `
   .debrief-choix{font:10.5px/1.45 Helvetica;color:#9aa5b3;margin-bottom:7px}
   .debrief-choix b{color:#d7d1c4;margin-right:4px}
   .debrief-choix em{display:block;font-style:italic;color:#8b95a2}
-  .debrief-note{font:9px/1 Helvetica;letter-spacing:.1em;color:#5f6a78}
+  .debrief-note{font:9px/1 Helvetica;letter-spacing:.1em;color:#7b8694}
 
   @keyframes carte{0%{opacity:0}12%{opacity:1}72%{opacity:1}100%{opacity:0}}
   @keyframes apparait{from{opacity:0;transform:translate(-50%,-46%)}to{opacity:1;transform:translate(-50%,-50%)}}
