@@ -34,6 +34,21 @@ c'est que le serveur n'est pas lancé.
 - Le compteur (touche F) affiche aussi le nom du moteur de rendu : s'il indique SwiftShader, la machine
   fait le rendu sur le processeur et les performances ne veulent rien dire.
 
+## Déploiement Render
+
+Le dépôt contient `render.yaml` : un service web Node, offre gratuite, qui construit le bundle
+puis démarre le serveur.
+
+- Nouveau service : Dashboard Render, « New », « Blueprint », choisir le dépôt `feyzin-1966-3d`.
+  Render lit `render.yaml` et propose le service tel quel.
+- Réglages manuels, si tu préfères : type Web Service, runtime Node, build
+  `npm install && npm run build`, start `npm start`, health check `/health`, `NODE_VERSION=22`.
+- L'adresse devient `https://<nom>.onrender.com` : `/host` pour l'écran de salle,
+  `/play?pin=XXXX` pour les téléphones. Tout passe par le même domaine, WebSocket compris.
+- Sur l'offre gratuite, l'instance s'endort au bout d'un quart d'heure sans visiteur : ouvrir
+  `/host` une ou deux minutes avant la séance pour la réveiller, sinon le premier chargement
+  prend une trentaine de secondes.
+
 ## Rôles et brouillard d'information
 
 | Rôle | Ce qu'il voit |

@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: feyzin-1966-3d
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+    autoDeploy: true
