@@ -10,7 +10,8 @@
     "dev": "node scripts/build.mjs --watch & node server/app.js",
     "sync:engine": "node scripts/sync-engine.mjs",
     "joueurs": "node scripts/joueurs-auto.mjs",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "prestart": "node scripts/build.mjs"
   },
   "dependencies": {
     "@react-three/drei": "9.114.3",

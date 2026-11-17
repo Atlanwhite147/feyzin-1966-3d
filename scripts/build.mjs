@@ -1,7 +1,14 @@
 /* Build esbuild : un seul bundle, pas de dépendance à Vite.
    Le numéro de version est écrit dans index.html pour éviter tout cache de bundle. */
-import * as esbuild from "esbuild";
 import fs from "node:fs";
+
+let esbuild;
+try {
+  esbuild = await import("esbuild");
+} catch (e) {
+  console.error("esbuild est absent : lancez d'abord « npm install » dans ce dossier.");
+  process.exit(1);
+}
 
 const watch = process.argv.includes("--watch");
 
