@@ -3,6 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import { rejoindrePlay, voter } from "./net/net.js";
 import { useNet } from "./net/useNet.js";
 import RoleScene from "./scene/play/RoleScene.jsx";
+import CadrageRole from "./scene/play/CadrageRole.jsx";
 import PlayHUD from "./ui/PlayHUD.jsx";
 import { SCENARIO } from "./data/scenarioClient.js";
 
@@ -75,7 +76,13 @@ export default function PlayApp() {
 
   return (
     <div style={{ position: "relative", height: "100%" }}>
-      <Canvas dpr={[1, 2]} camera={{ position: [0, 1.7, 6], fov: 62, near: 0.1, far: 400 }} gl={{ antialias: true }}>
+      <Canvas
+        dpr={[1, 2]}
+        camera={{ position: [0.55, 1.66, 5.4], fov: 60, near: 0.1, far: 400 }}
+        gl={{ antialias: true }}
+        onCreated={({ gl }) => { gl.toneMapping = 4; gl.toneMappingExposure = 1.3; }}
+      >
+        <CadrageRole role={role} />
         <RoleScene role={role} etat={publicEtat} />
       </Canvas>
       <PlayHUD role={role} etat={publicEtat} scenario={SCENARIO} voter={voter} />

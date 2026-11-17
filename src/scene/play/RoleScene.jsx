@@ -78,20 +78,65 @@ function Manometre({ pression }) {
     aiguille.current.rotation.z = THREE.MathUtils.lerp(aiguille.current.rotation.z, -Math.PI * 0.75 + cible * Math.PI * 1.5 + tremble, Math.min(1, dt * 4));
   });
   return (
-    <group position={[-1.8, 1.75, 0.4]} rotation={[0, 0.4, 0]}>
+    <group position={[0.35, 1.45, 2.15]} rotation={[0, -0.05, -0.04]}>
       <mesh>
-        <cylinderGeometry args={[0.42, 0.42, 0.08, 32]} />
+        <cylinderGeometry args={[0.23, 0.23, 0.06, 32]} />
         <meshStandardMaterial color="#1b1f26" roughness={0.7} />
       </mesh>
-      <mesh position={[0, 0.05, 0]}>
-        <circleGeometry args={[0.34, 32]} />
-        <meshBasicMaterial color="#d8d2c4" />
+      <mesh position={[0, 0.06, 0]}>
+        <circleGeometry args={[0.2, 32]} />
+        <meshStandardMaterial color="#e8e2d2" emissive="#e8e2d2" emissiveIntensity={0.35} roughness={0.6} />
       </mesh>
+      {Array.from({ length: 9 }).map((_, i) => {
+        const a = -Math.PI * 0.75 + (i / 8) * Math.PI * 1.5;
+        return (
+          <mesh key={i} position={[Math.cos(a) * 0.165, 0.045, Math.sin(a) * 0.165]} rotation={[0, -a, 0]}>
+            <boxGeometry args={[0.02, 0.004, 0.05]} />
+            <meshBasicMaterial color="#20242a" />
+          </mesh>
+        );
+      })}
       <mesh ref={aiguille} position={[0, 0.07, 0]}>
-        <boxGeometry args={[0.02, 0.28, 0.01]} />
+        <boxGeometry args={[0.016, 0.15, 0.008]} />
         <meshBasicMaterial color="#a33222" />
       </mesh>
     </group>
+  );
+}
+
+function Jet({ actif }) {
+  const points = useRef();
+  const positions = useMemo(() => {
+    const a = new Float32Array(240 * 3);
+    for (let i = 0; i < 240; i++) {
+      a[i * 3] = (Math.random() - 0.5) * 0.12;
+      a[i * 3 + 1] = Math.random() * 0.1;
+      a[i * 3 + 2] = Math.random() * 1.6;
+    }
+    return a;
+  }, []);
+  useFrame((s, dt) => {
+    if (!points.current || !actif) return;
+    const arr = points.current.geometry.attributes.position.array;
+    for (let i = 0; i < 240; i++) {
+      arr[i * 3 + 2] += (1.4 + (i % 5) * 0.25) * dt;
+      arr[i * 3 + 1] -= 0.26 * dt;
+      if (arr[i * 3 + 2] > 3.2) {
+        arr[i * 3 + 2] = 0.1;
+        arr[i * 3 + 1] = Math.random() * 0.1;
+      }
+    }
+    points.current.geometry.attributes.position.needsUpdate = true;
+    points.current.material.opacity = 0.35 + Math.sin(s.clock.elapsedTime * 9) * 0.1;
+  });
+  if (!actif) return null;
+  return (
+    <points ref={points} position={[0.55, 0.62, 1.15]} rotation={[0.12, 0, 0]}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <pointsMaterial size={0.06} color="#dfe9f2" transparent opacity={0.4} depthWrite={false} />
+    </points>
   );
 }
 
@@ -103,19 +148,59 @@ export default function RoleScene({ role, etat }) {
     return (
       <>
         <color attach="background" args={["#070910"]} />
-        <fogExp2 attach="fog" args={["#070910", 0.045]} />
-        <ambientLight intensity={0.35} color="#7f8ea6" />
-        <spotLight position={[2, 5, 4]} angle={0.7} penumbra={0.8} intensity={40} color="#ffd9a8" castShadow />
-        <mesh position={[0, 0, -6]}>
-          <sphereGeometry args={[5.4, 36, 24]} />
-          <meshStandardMaterial color="#8b98a8" metalness={0.6} roughness={0.5} />
+        <fogExp2 attach="fog" args={["#070910", 0.028]} />
+        <ambientLight intensity={0.6} color="#8b9cb6" />
+        <spotLight position={[3, 6, 4]} angle={0.9} penumbra={0.85} intensity={140} color="#ffd2a0" castShadow />
+        <pointLight position={[-3, 2.4, 3]} intensity={26} color="#8fb4e8" distance={18} />
+        <directionalLight position={[-7, 9, 5]} intensity={0.7} color="#b6cbe8" />
+        {/* baladeuse de chantier au-dessus du poste de purge */}
+        <mesh position={[2.5, 3.9, 2.2]}>
+          <cylinderGeometry args={[0.26, 0.3, 0.5, 10]} />
+          <meshStandardMaterial color="#ffcf94" emissive="#ffcf94" emissiveIntensity={2.2} toneMapped={false} />
         </mesh>
-        <mesh position={[0, -1.6, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-          <planeGeometry args={[26, 26]} />
-          <meshStandardMaterial color="#14171d" roughness={0.95} />
+        <pointLight position={[2.5, 3.8, 2.2]} intensity={70} distance={16} decay={1.6} color="#ffcf94" />
+
+        {/* la sphère 443, plantée derrière l'installation de purge */}
+        <mesh position={[0, 5.4, -16]} castShadow>
+          <sphereGeometry args={[5.4, 32, 24]} />
+          <meshStandardMaterial color="#9aa6b4" metalness={0.62} roughness={0.42} />
         </mesh>
+        {[0, 1].map((i) => (
+          <mesh key={i} position={[0, 5.4, -16]} rotation={[Math.PI / 2, (i * Math.PI) / 2, 0]}>
+            <torusGeometry args={[5.44, 0.05, 6, 56]} />
+            <meshStandardMaterial color="#6c7887" metalness={0.7} roughness={0.5} />
+          </mesh>
+        ))}
+        {[[-3.4, -3.4], [3.4, -3.4], [-3.4, 3.4], [3.4, 3.4]].map(([x, z], i) => (
+          <mesh key={i} position={[x, 2.6, -16 + z]} castShadow>
+            <cylinderGeometry args={[0.24, 0.3, 5.2, 8]} />
+            <meshStandardMaterial color="#4c535c" roughness={0.95} />
+          </mesh>
+        ))}
+
+        {/* sol et margelle */}
+        <mesh position={[0, 0, -4]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+          <planeGeometry args={[40, 40]} />
+          <meshStandardMaterial color="#22262c" roughness={0.96} />
+        </mesh>
+        <mesh position={[0, 0.06, -6]}>
+          <boxGeometry args={[12, 0.12, 1]} />
+          <meshStandardMaterial color="#2c3138" roughness={0.9} />
+        </mesh>
+
+        {/* collecteur entre la sphère et la vanne */}
+        <mesh position={[0, 0.82, -7]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[0.22, 0.22, 9, 10]} />
+          <meshStandardMaterial color="#7a3f32" metalness={0.5} roughness={0.6} />
+        </mesh>
+        <mesh position={[0, 0.82, -2.4]} castShadow>
+          <cylinderGeometry args={[0.34, 0.34, 1.1, 10]} />
+          <meshStandardMaterial color="#8a4a38" metalness={0.55} roughness={0.55} />
+        </mesh>
+
         <Vanne givre={(c.valve_icing_level || 0) / 100} />
         <Manometre pression={c.pression} />
+        <Jet actif={!!c.fuite_active} />
       </>
     );
   }

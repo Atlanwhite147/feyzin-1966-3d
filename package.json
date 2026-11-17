@@ -1,14 +1,15 @@
 {
   "name": "feyzin-1966-3d",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview --port 4173",
+    "build": "node scripts/build.mjs",
+    "build:watch": "node scripts/build.mjs --watch",
     "start": "node server/app.js",
+    "dev": "node scripts/build.mjs --watch & node server/app.js",
     "sync:engine": "node scripts/sync-engine.mjs",
+    "joueurs": "node scripts/joueurs-auto.mjs",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
@@ -23,9 +24,5 @@
     "socket.io": "4.8.1",
     "socket.io-client": "4.8.1",
     "three": "0.169.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "4.3.3",
-    "vite": "5.4.10"
   }
 }

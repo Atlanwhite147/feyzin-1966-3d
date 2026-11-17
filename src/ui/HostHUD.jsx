@@ -23,9 +23,10 @@ function Jauge({ label, valeur, max, unite, alerte }) {
   );
 }
 
-export default function HostHUD({ pin, etat, connecte }) {
+export default function HostHUD({ pin, etat, connecte, son, onSon, rendu }) {
   const [aide, setAide] = useState(false);
   const [discret, setDiscret] = useState(false);
+  const [compteur, setCompteur] = useState(false);
   const c = etat?.capteurs;
   const chrono = etat?.chrono ?? 0;
 
@@ -37,6 +38,7 @@ export default function HostHUD({ pin, etat, connecte }) {
       if (k === "m") setDiscret((d) => !d);
       if (k === "?") setAide((a) => !a);
       if (k === "r") reremplir();
+      if (k === "f") setCompteur((v) => !v);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -126,6 +128,9 @@ export default function HostHUD({ pin, etat, connecte }) {
       <div style={{ position: "fixed", left: 22, bottom: 16, display: "flex", gap: 10, alignItems: "center" }}>
         <button style={bouton} onClick={clore}>Clore la phase</button>
         <button style={boutonGhost} onClick={avancer}>Phase suivante</button>
+        <button style={{ ...boutonGhost, borderColor: son ? "#4d7a5c" : "#2b3340", color: son ? "#a7d3b5" : "#c9c2b4" }} onClick={onSon}>
+          {son ? "son actif" : "activer le son"}
+        </button>
         <span style={{ font: "9.5px Helvetica", letterSpacing: ".1em", color: "#5f6a78" }}>espace · N · M · ?</span>
         {!connecte && <span style={{ font: "10px Helvetica", color: "#e0492a" }}>hors ligne</span>}
       </div>
@@ -144,6 +149,12 @@ export default function HostHUD({ pin, etat, connecte }) {
         </div>
       )}
 
+      {compteur && (
+        <div style={{ position: "fixed", right: 22, bottom: 16, font: "600 11px Helvetica", color: fps < 45 ? "#e0492a" : "#a7d3b5", background: "rgba(8,10,14,.8)", padding: "5px 9px", border: "1px solid #222834" }}>
+          {fps} images par seconde · {rendu ? rendu.slice(0, 46) : "rendu"}
+        </div>
+      )}
+
       {aide && (
         <div style={{ position: "fixed", right: 22, bottom: 16, width: 280, background: "rgba(8,10,14,.92)", border: "1px solid #222834", padding: 12, font: "11px Helvetica", color: "#c9c2b4", lineHeight: 1.6 }}>
           <b style={{ color: "#f0e9dc" }}>Raccourcis</b>
@@ -151,6 +162,7 @@ export default function HostHUD({ pin, etat, connecte }) {
           <div>N : phase suivante</div>
           <div>R : nouvelle séance</div>
           <div>M : masquer le panneau</div>
+          <div>F : compteur d'images</div>
           <div>? : cette aide</div>
         </div>
       )}
@@ -171,15 +183,15 @@ function Debrief({ etat, fps }) {
   const fin = etat.fin;
   const d = etat.debrief;
   return (
-    <div style={{ position: "fixed", inset: 0, display: "grid", gridTemplateColumns: "1.05fr .95fr", gap: 0, background: "linear-gradient(90deg, rgba(5,7,10,.94) 0%, rgba(5,7,10,.72) 60%, rgba(5,7,10,.35) 100%)", pointerEvents: "none" }}>
+    <div style={{ position: "fixed", inset: 0, display: "grid", gridTemplateColumns: "1.05fr .95fr", gap: 0, background: "linear-gradient(90deg, rgba(4,6,9,.975) 0%, rgba(4,6,9,.93) 52%, rgba(4,6,9,.55) 100%)", pointerEvents: "none" }}>
       <div style={{ padding: "34px 30px", display: "flex", flexDirection: "column" }}>
         <div style={{ font: "9.5px Helvetica", letterSpacing: ".26em", textTransform: "uppercase", color: "#c2622c" }}>débrief · vos décisions face au réel</div>
         <h1 style={{ font: "600 40px/1.05 Georgia, serif", margin: "10px 0 14px", color: "#f4ecdf" }}>{fin?.titre || "Fin de séance"}</h1>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {d.lignes.map((l, i) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "64px 150px 1fr", gap: 10, borderBottom: "1px dotted #232a35", padding: "5px 0", font: "11.5px Helvetica", alignItems: "baseline" }}>
+            <div key={i} onClick={() => window.dispatchEvent(new CustomEvent("feyzin:point", { detail: i }))} style={{ display: "grid", gridTemplateColumns: "64px 150px 1fr", gap: 10, borderBottom: "1px dotted #232a35", padding: "5px 0", font: "11.5px Helvetica", alignItems: "baseline", cursor: "pointer", pointerEvents: "auto" }}>
               <span style={{ color: "#7f8b9a", fontVariantNumeric: "tabular-nums" }}>{l.heure}</span>
-              <span style={{ fontSize: 9.5, letterSpacing: ".06em", textTransform: "uppercase", color: l.ecart === "maitrise" ? "#9dc3aa" : l.ecart === "conforme" ? "#c0a05a" : l.ecart === "retard" ? "#c98b5a" : "#e08b7a" }}>{l.libelle}</span>
+              <span style={{ fontSize: 9, letterSpacing: ".05em", textTransform: "uppercase", whiteSpace: "nowrap", color: l.ecart === "maitrise" ? "#9dc3aa" : l.ecart === "conforme" ? "#c0a05a" : l.ecart === "retard" ? "#c98b5a" : "#e08b7a" }}>{l.libelle}</span>
               <span style={{ color: "#d7d1c4" }}>{l.titre}</span>
             </div>
           ))}
@@ -193,7 +205,7 @@ function Debrief({ etat, fps }) {
         </div>
       </div>
       <div style={{ padding: "34px 26px", display: "flex", flexDirection: "column", gap: 10, justifyContent: "center" }}>
-        <div style={{ border: "1px solid #2b3340", background: "rgba(12,15,20,.8)", padding: "12px 14px" }}>
+        <div style={{ border: "1px solid #2b3340", background: "rgba(10,13,18,.92)", padding: "12px 14px" }}>
           <div style={{ font: "9px Helvetica", letterSpacing: ".14em", textTransform: "uppercase", color: "#6f7b8a", marginBottom: 6 }}>barrières</div>
           {(fin?.barrières || []).map((b) => (
             <div key={b.nom} style={{ font: "11.5px Helvetica", color: b.tenu ? "#a7d3b5" : "#e08b7a", marginBottom: 3 }}>
@@ -201,15 +213,18 @@ function Debrief({ etat, fps }) {
             </div>
           ))}
         </div>
-        <div style={{ border: "1px solid #2b3340", background: "rgba(12,15,20,.8)", padding: "12px 14px" }}>
+        <div style={{ border: "1px solid #2b3340", background: "rgba(10,13,18,.92)", padding: "12px 14px" }}>
           <div style={{ font: "9px Helvetica", letterSpacing: ".14em", textTransform: "uppercase", color: "#6f7b8a", marginBottom: 6 }}>les décisions de la salle</div>
           {d.lignes.map((l, i) => (
-            <div key={i} style={{ font: "10.5px Helvetica", color: "#9aa5b3", marginBottom: 4, lineHeight: 1.35 }}>
-              <b style={{ color: "#d7d1c4" }}>{l.heure}</b> {l.choix.slice(0, 92)}
+            <div key={i} style={{ font: "10.5px Helvetica", color: "#9aa5b3", marginBottom: 5, lineHeight: 1.35 }}>
+              <b style={{ color: "#d7d1c4" }}>{l.heure}</b> {l.choix.slice(0, 88)}
+              <div style={{ color: l.ecart === "conforme" ? "#8f9aa8" : "#7f8b9a", fontStyle: "italic", marginTop: 1 }}>{l.reel}</div>
             </div>
           ))}
         </div>
-        <div style={{ font: "9px Helvetica", letterSpacing: ".1em", color: "#5f6a78" }}>{fps} images par seconde</div>
+        <div style={{ font: "9px Helvetica", letterSpacing: ".1em", color: "#5f6a78" }}>
+          cliquez une ligne pour replacer la caméra · {fps} images par seconde
+        </div>
       </div>
     </div>
   );

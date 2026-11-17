@@ -13,6 +13,20 @@
 </head>
 <body>
 <div id="root"><div class="charge">chargement du site</div></div>
-<script type="module" src="/public/app.js"></script>
+<script>
+  /* filet de sécurité : toute erreur devient visible et lisible */
+  window.__err = null;
+  window.addEventListener("error", (e) => {
+    window.__err = (e.message || "erreur") + " · " + (e.filename || "") + ":" + (e.lineno || 0);
+    const d = document.createElement("pre");
+    d.textContent = "ERREUR : " + window.__err;
+    d.style.cssText = "position:fixed;left:0;right:0;bottom:0;margin:0;padding:10px;background:#7a1d10;color:#fff;font:12px monospace;z-index:99999;white-space:pre-wrap";
+    document.body.appendChild(d);
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    window.__err = "promesse rejetée · " + (e.reason && e.reason.message ? e.reason.message : e.reason);
+  });
+</script>
+<script type="module" src="/public/app.js?v=mwkhrw02"></script>
 </body>
 </html>

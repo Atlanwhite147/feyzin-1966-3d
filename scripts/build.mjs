@@ -1,4 +1,5 @@
-/* Build esbuild : un seul bundle, pas de dépendance à Vite. */
+/* Build esbuild : un seul bundle, pas de dépendance à Vite.
+   Le numéro de version est écrit dans index.html pour éviter tout cache de bundle. */
 import * as esbuild from "esbuild";
 import fs from "node:fs";
 
@@ -20,11 +21,21 @@ const options = {
 
 fs.mkdirSync("public", { recursive: true });
 
+function versionner() {
+  const stamp = Date.now().toString(36);
+  const html = fs.readFileSync("index.html", "utf8");
+  const suivant = html.replace(/\/public\/app\.js(\?v=[a-z0-9]+)?"/, "/public/app.js?v=" + stamp + '"');
+  if (suivant !== html) fs.writeFileSync("index.html", suivant);
+  console.log("index.html pointe sur app.js?v=" + stamp);
+}
+
 if (watch) {
   const ctx = await esbuild.context(options);
   await ctx.watch();
+  versionner();
   console.log("esbuild en veille");
 } else {
   await esbuild.build(options);
   console.log("bundle écrit : public/app.js");
+  versionner();
 }
