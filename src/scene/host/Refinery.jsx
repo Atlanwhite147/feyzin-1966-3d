@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Html } from "@react-three/drei";
@@ -248,6 +248,12 @@ function Annexes() {
 }
 
 export default function Refinery({ etat }) {
+  const [etiquette, setEtiquette] = useState(true);
+  useEffect(() => {
+    const surCarte = (e) => setEtiquette(!e.detail);
+    window.addEventListener("feyzin:carte", surCarte);
+    return () => window.removeEventListener("feyzin:carte", surCarte);
+  }, []);
   const chaleur = etat?.capteurs?.sphere_443_metal_temp ?? 20;
   const givre = THREE.MathUtils.clamp((etat?.capteurs?.valve_icing_level ?? 0) / 100, 0, 1);
   const bleve = !!etat?.capteurs?.bleve_triggered;
@@ -257,7 +263,7 @@ export default function Refinery({ etat }) {
       <Cuvette />
       <Annexes />
       {SPHERES.map((s) => (
-        <Sphere key={s.id} id={s.id} x={s.x} z={s.z} chaleur={bleve && s.id === "443" ? 650 : chaleur} givre={s.id === "443" ? givre : 0.25} etiquette={etat?.etat !== "debrief"} />
+        <Sphere key={s.id} id={s.id} x={s.x} z={s.z} chaleur={bleve && s.id === "443" ? 650 : chaleur} givre={s.id === "443" ? givre : 0.25} etiquette={etiquette && etat?.etat !== "debrief"} />
       ))}
     </group>
   );

@@ -13,7 +13,7 @@ c.on("connect", async () => {
   c.emit("host:rejoindre", { pin }, async (r) => {
     if (!r?.ok) { console.log("salle refusée", r); process.exit(1); }
     console.log("salle", pin, "prise en main");
-    for (let phase = 0; phase < 5; phase++) {
+    for (let phase = 0; phase < 6; phase++) {
       c.emit("host:avancer");
       await pause(1500);
       c.emit("host:clore");

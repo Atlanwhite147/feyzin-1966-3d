@@ -1,5 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { clore, avancer, reremplir } from "../net/net.js";
+import QRCode from "qrcode";
+
+/* Interface de salle : la scène 3D est le fond permanent, tout le reste vient
+   s'y superposer en surimpression. Pas de panneaux opaques, seulement des
+   filets, des dégradés de bord et de la typographie. */
 
 const ROLE_LABEL = {
   OPERATEUR_PURGE: "Opérateur purge",
@@ -8,17 +13,23 @@ const ROLE_LABEL = {
   GENDARMERIE_A7: "Gendarmerie"
 };
 
-function Jauge({ label, valeur, max, unite, alerte }) {
+const HEURE = { 1: "06 h 40", 2: "06 h 55", 3: "07 h 15", 4: "07 h 45", 5: "08 h 45" };
+const LETTRE = ["A", "B", "C"];
+
+function Capteur({ label, valeur, max, unite, alerte }) {
   const pct = Math.max(0, Math.min(100, (valeur / max) * 100));
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-      <span style={{ width: 108, fontSize: 9.5, letterSpacing: ".09em", textTransform: "uppercase", color: "#8f9aa8" }}>{label}</span>
-      <span style={{ flex: 1, height: 7, background: "#1b1f27", overflow: "hidden" }}>
-        <span style={{ display: "block", height: "100%", width: pct + "%", background: alerte ? "#e0492a" : "#c2622c", transition: "width .35s linear" }} />
-      </span>
-      <span style={{ width: 84, textAlign: "right", fontSize: 11, color: "#e9e4d9", fontVariantNumeric: "tabular-nums" }}>
-        {Math.round(valeur)} {unite}
-      </span>
+    <div className="cap">
+      <div className="cap-haut">
+        <span className="cap-label">{label}</span>
+        <span className={"cap-val" + (alerte ? " alerte" : "")}>
+          {Math.round(valeur)}
+          <em>{unite}</em>
+        </span>
+      </div>
+      <div className="cap-rail">
+        <span className={"cap-jauge" + (alerte ? " alerte" : "")} style={{ width: pct + "%" }} />
+      </div>
     </div>
   );
 }
@@ -27,9 +38,43 @@ export default function HostHUD({ pin, etat, connecte, son, onSon, rendu }) {
   const [aide, setAide] = useState(false);
   const [discret, setDiscret] = useState(false);
   const [compteur, setCompteur] = useState(false);
-  const c = etat?.capteurs;
-  const chrono = etat?.chrono ?? 0;
+  const [fps, setFps] = useState(0);
+  const [carte, setCarte] = useState(null);
+  const [qr, setQr] = useState(null);
+  const [adresse, setAdresse] = useState(typeof window !== "undefined" ? window.location.origin : "");
+  const dernierePhase = useRef(0);
 
+  /* Adresse de la salle : le serveur donne l'IP du réseau quand on est en local. */
+  useEffect(() => {
+    let vivant = true;
+    fetch("/adresse")
+      .then((r) => r.json())
+      .then((d) => { if (vivant && d?.url) setAdresse(d.url.replace(/\/+$/, "")); })
+      .catch(() => {});
+    return () => { vivant = false; };
+  }, []);
+
+  /* QR d'accès : on le régénère à chaque nouveau code de salle. */
+  useEffect(() => {
+    if (!pin || typeof window === "undefined") return;
+    let vivant = true;
+    QRCode.toDataURL(adresse + "/play", { margin: 2, width: 240, color: { dark: "#0b0e13", light: "#f4ecdf" } })
+      .then((url) => { if (vivant) setQr(url); })
+      .catch(() => setQr(null));
+    return () => { vivant = false; };
+  }, [pin, adresse]);
+
+  const c = etat?.capteurs || {};
+  const chrono = etat?.chrono ?? 0;
+  const phase = etat?.phase ?? 0;
+  const decision = etat?.etat === "decision";
+  const revelation = etat?.etat === "revelation";
+  const attente = etat?.etat === "attente" || phase === 0;
+  const votes = etat?.votes || {};
+  const compte = LETTRE.map((_, i) => Object.values(votes).filter((v) => v === i).length);
+  const joueurs = etat?.joueurs || [];
+
+  /* clavier */
   useEffect(() => {
     const onKey = (e) => {
       const k = e.key.toLowerCase();
@@ -44,7 +89,7 @@ export default function HostHUD({ pin, etat, connecte, son, onSon, rendu }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const [fps, setFps] = useState(0);
+  /* compteur d'images */
   useEffect(() => {
     let images = 0;
     let dernier = performance.now();
@@ -64,104 +109,193 @@ export default function HostHUD({ pin, etat, connecte, son, onSon, rendu }) {
     return () => { stop = true; };
   }, []);
 
+  /* carte de passage de phase, en surimpression */
+  useEffect(() => {
+    if (phase > 0 && phase !== dernierePhase.current) {
+      dernierePhase.current = phase;
+      setCarte({ n: phase, titre: etat?.titre || "", heure: HEURE[phase] || "" });
+      window.dispatchEvent(new CustomEvent("feyzin:carte", { detail: true }));
+      const t = setTimeout(() => {
+        setCarte(null);
+        window.dispatchEvent(new CustomEvent("feyzin:carte", { detail: false }));
+      }, 4200);
+      return () => clearTimeout(t);
+    }
+  }, [phase, etat?.titre]);
+
   if (etat?.etat === "debrief" && etat.debrief) {
     return <Debrief etat={etat} fps={fps} />;
   }
 
   if (discret) {
     return (
-      <div style={{ position: "fixed", left: 14, bottom: 12, font: "10px Helvetica", letterSpacing: ".2em", color: "#5b6472" }}>
-        panneau masqué · M pour revenir
-      </div>
+      <>
+        <style>{CSS}</style>
+        <div className="voile-haut" />
+        <div className="voile-bas" />
+        <div className="discret">panneau masqué · M pour revenir</div>
+      </>
     );
   }
 
   return (
     <>
-      <div style={{ position: "fixed", left: 22, top: 18, pointerEvents: "none" }}>
-        <div style={{ font: "10px/1 Helvetica", letterSpacing: ".28em", textTransform: "uppercase", color: "#6f7b8a" }}>Feyzin 1966</div>
-        <div style={{ marginTop: 6, font: "600 30px/1 Helvetica", letterSpacing: ".16em", color: "#f0e9dc" }}>{pin || "····"}</div>
-        <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ font: "10px Helvetica", letterSpacing: ".14em", textTransform: "uppercase", color: "#c2622c" }}>
-            {etat?.etat === "attente" ? "salle en attente" : "phase " + etat?.phase + " · " + etat?.titre}
-          </span>
-          {etat?.etat === "decision" && (
-            <span style={{ font: "600 11px Helvetica", color: chrono <= 10 ? "#e0492a" : "#e9e4d9" }}>{chrono}s</span>
+      <style>{CSS}</style>
+
+      {/* dégradés de bord : ils rendent le texte lisible sans masquer la scène */}
+      <div className="voile-haut" />
+      <div className="voile-bas" />
+
+      {/* filet de progression de la phase, collé au bord supérieur */}
+      {decision && <div className="progression" style={{ width: Math.max(0, Math.min(100, (chrono / 45) * 100)) + "%" }} />}
+
+      <header className="entete">
+        <div className="bloc-marque">
+          <div className="marque">Feyzin 1966</div>
+          <div className="mention">point sûreté · reconstitution</div>
+        </div>
+
+        <div className="bloc-phase">
+          {attente ? (
+            <>
+              <div className="phase-num">séance</div>
+              <div className="phase-titre attente-titre">avant la purge</div>
+              <div className="phase-heure">4 janvier 1966 · 06 h 30</div>
+            </>
+          ) : (
+            <>
+              <div className="phase-num">
+                phase {String(phase).padStart(2, "0")}
+                <span className="phase-sur">/ 05</span>
+              </div>
+              <div className="phase-titre">{etat?.titre}</div>
+              <div className="phase-heure">{HEURE[phase]}</div>
+            </>
           )}
         </div>
-      </div>
 
-      <div style={{ position: "fixed", right: 22, top: 18, width: 300 }}>
-        <div style={{ background: "rgba(8,10,14,.72)", border: "1px solid #222834", padding: "10px 12px" }}>
-          <div style={{ font: "9px Helvetica", letterSpacing: ".16em", textTransform: "uppercase", color: "#6f7b8a", marginBottom: 7 }}>capteurs du site</div>
-          <Jauge label="Paroi 443" valeur={c?.sphere_443_metal_temp ?? 20} max={650} unite="°C" alerte={(c?.sphere_443_metal_temp ?? 0) > 380} />
-          <Jauge label="Givre purge" valeur={c?.valve_icing_level ?? 0} max={100} unite="%" alerte={(c?.valve_icing_level ?? 0) > 70} />
-          <Jauge label="Nappe vers A7" valeur={c?.cloud_density_a7 ?? 0} max={100} unite="%" alerte={(c?.cloud_density_a7 ?? 0) > 45} />
-          <Jauge label="Réserve eau" valeur={c?.water_reserve ?? 100} max={100} unite="%" alerte={(c?.water_reserve ?? 100) < 30} />
-          <div style={{ display: "flex", gap: 6, marginTop: 7, flexWrap: "wrap" }}>
-            <span style={{ font: "9px Helvetica", letterSpacing: ".08em", textTransform: "uppercase", padding: "3px 6px", border: "1px solid " + (c?.a7_traffic_blocked ? "#4d7a5c" : "#7a3a2c"), color: c?.a7_traffic_blocked ? "#a7d3b5" : "#e08b7a" }}>
-              A7 {c?.a7_traffic_blocked ? "coupée" : "ouverte"}
+        <div className="bloc-droite">
+          <div className={"compte-a-rebours" + (chrono <= 10 ? " vif" : "")}>
+            {decision ? chrono + "s" : revelation ? "clos" : "—"}
+          </div>
+          <div className="etat-ligne">
+            <span className={c.a7_traffic_blocked ? "marqueur ok" : "marqueur"}>A7 {c.a7_traffic_blocked ? "coupée" : "ouverte"}</span>
+            <span className={c.bleve_triggered ? "marqueur alerte" : "marqueur"}>{c.bleve_triggered ? "rupture" : "intègre"}</span>
+            <span className="marqueur">secours {c.secours_distance ?? 0} m</span>
+            {!connecte && <span className="marqueur alerte">hors ligne</span>}
+          </div>
+        </div>
+      </header>
+
+      {/* rail des capteurs, à droite, sans cadre */}
+      <aside className="capteurs">
+        <div className="capteurs-titre">capteurs du site</div>
+        <Capteur label="Paroi 443" valeur={c.sphere_443_metal_temp ?? 20} max={650} unite="°C" alerte={(c.sphere_443_metal_temp ?? 0) > 380} />
+        <Capteur label="Givre purge" valeur={c.valve_icing_level ?? 0} max={100} unite="%" alerte={(c.valve_icing_level ?? 0) > 70} />
+        <Capteur label="Nappe / A7" valeur={c.cloud_density_a7 ?? 0} max={100} unite="%" alerte={(c.cloud_density_a7 ?? 0) > 45} />
+        <Capteur label="Réserve eau" valeur={c.water_reserve ?? 100} max={100} unite="%" alerte={(c.water_reserve ?? 100) < 30} />
+      </aside>
+
+      {/* code de la salle, en bas à gauche, tant que la séance n'a pas commencé */}
+      {attente && (
+        <div className="invitation">
+          <div className="invitation-titre">Rejoignez la salle depuis votre téléphone</div>
+          <div className="invitation-corps">
+            <div>
+              <div className="invitation-pin">{pin || "····"}</div>
+              <div className="invitation-url">
+                {adresse.replace(/^https?:\/\//, "")}/play
+                <span> · ou scannez le code</span>
+              </div>
+            </div>
+            {qr && <img className="invitation-qr" src={qr} alt="code d'accès à la salle" />}
+          </div>
+        </div>
+      )}
+
+      {/* résultat du vote, en surimpression au centre */}
+      {revelation && etat?.dernierChoix && (
+        <div className="verdict">
+          <div className="verdict-titre">choix de la salle</div>
+          <div className="verdict-lettre">{LETTRE[etat.dernierChoix.choix]}</div>
+          <div className="verdict-detail">
+            {etat.dernierChoix.total.map((n, i) => (
+              <span key={i} className={i === etat.dernierChoix.choix ? "retenu" : ""}>
+                {LETTRE[i]} {n}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <footer className="pied">
+        <div className="pied-gauche" />
+
+        <div className="equipes">
+          <div className="equipes-titre">
+            postes <span>{joueurs.length}/4</span>
+            <span className="points">
+              {[0, 1, 2, 3].map((i) => <i key={i} className={i < joueurs.length ? "pris" : ""} />)}
             </span>
-            <span style={{ font: "9px Helvetica", letterSpacing: ".08em", textTransform: "uppercase", padding: "3px 6px", border: "1px solid " + (c?.bleve_triggered ? "#7a3a2c" : "#2b3340"), color: c?.bleve_triggered ? "#e08b7a" : "#8f9aa8" }}>
-              {c?.bleve_triggered ? "rupture" : "intègre"}
-            </span>
-            <span style={{ font: "9px Helvetica", letterSpacing: ".08em", textTransform: "uppercase", padding: "3px 6px", border: "1px solid #2b3340", color: "#8f9aa8" }}>
-              secours {c?.secours_distance ?? 0} m
-            </span>
+          </div>
+          <div className="equipes-liste">
+            {Object.keys(ROLE_LABEL).map((role) => {
+              const j = joueurs.find((x) => x.role === role);
+              return (
+                <span key={role} className={"poste" + (j ? " pris" : "")}>
+                  <i />
+                  {ROLE_LABEL[role]}
+                  {j ? <b>{j.nom}</b> : null}
+                </span>
+              );
+            })}
           </div>
         </div>
 
-        <div style={{ marginTop: 10, background: "rgba(8,10,14,.72)", border: "1px solid #222834", padding: "10px 12px" }}>
-          <div style={{ font: "9px Helvetica", letterSpacing: ".16em", textTransform: "uppercase", color: "#6f7b8a", marginBottom: 6 }}>équipes</div>
-          {["OPERATEUR_PURGE", "CHEF_DE_QUART", "POMPIERS_VIENNE_LYON", "GENDARMERIE_A7"].map((role) => {
-            const j = (etat?.joueurs || []).find((x) => x.role === role);
-            return (
-              <div key={role} style={{ display: "flex", justifyContent: "space-between", font: "11px Helvetica", color: j ? "#e9e4d9" : "#55606e", marginBottom: 3 }}>
-                <span>{ROLE_LABEL[role]}</span>
-                <span>{j ? j.nom : "libre"}</span>
-              </div>
-            );
-          })}
+        {decision && (
+          <div className="salle-vote">
+            <div className="salle-vote-titre">votes en cours</div>
+            <div className="salle-vote-lignes">
+              {compte.map((n, i) => (
+                <span key={i}>
+                  {LETTRE[i]}
+                  <b>{n}</b>
+                  <i style={{ width: Math.min(100, n * 33) + "%" }} />
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="commandes">
+          <button className="cmd fort" onClick={clore}>clore la phase</button>
+          <button className="cmd" onClick={avancer}>phase suivante</button>
+          <button className="cmd" onClick={onSon}>{son ? "son actif" : "son coupé"}</button>
+          <button className="cmd" onClick={() => setAide((a) => !a)}>?</button>
         </div>
-      </div>
+      </footer>
 
-      <div style={{ position: "fixed", left: 22, bottom: 16, display: "flex", gap: 10, alignItems: "center" }}>
-        <button style={bouton} onClick={clore}>Clore la phase</button>
-        <button style={boutonGhost} onClick={avancer}>Phase suivante</button>
-        <button style={{ ...boutonGhost, borderColor: son ? "#4d7a5c" : "#2b3340", color: son ? "#a7d3b5" : "#c9c2b4" }} onClick={onSon}>
-          {son ? "son actif" : "activer le son"}
-        </button>
-        <span style={{ font: "9.5px Helvetica", letterSpacing: ".1em", color: "#5f6a78" }}>espace · N · M · ?</span>
-        {!connecte && <span style={{ font: "10px Helvetica", color: "#e0492a" }}>hors ligne</span>}
-      </div>
-
-      {etat?.etat === "decision" && (
-        <div style={{ position: "fixed", left: "50%", bottom: 18, transform: "translateX(-50%)", display: "flex", gap: 10 }}>
-          {["A", "B", "C"].map((l, i) => {
-            const n = Object.values(etat.votes || {}).filter((v) => v === i).length;
-            const actif = n > 0;
-            return (
-              <div key={l} style={{ minWidth: 74, textAlign: "center", padding: "7px 12px", border: "1px solid " + (actif ? "#c2622c" : "#2b3340"), background: "rgba(8,10,14,.8)", color: actif ? "#f0e9dc" : "#8f9aa8", font: "600 12px Helvetica" }}>
-                {l} · {n}
-              </div>
-            );
-          })}
+      {carte && (
+        <div className="carte">
+          <div className="carte-num">phase {String(carte.n).padStart(2, "0")}</div>
+          <div className="carte-titre">{carte.titre}</div>
+          <div className="carte-heure">{carte.heure}</div>
         </div>
       )}
 
       {compteur && (
-        <div style={{ position: "fixed", right: 22, bottom: 16, font: "600 11px Helvetica", color: fps < 45 ? "#e0492a" : "#a7d3b5", background: "rgba(8,10,14,.8)", padding: "5px 9px", border: "1px solid #222834" }}>
-          {fps} images par seconde · {rendu ? rendu.slice(0, 46) : "rendu"}
+        <div className="compteur">
+          {fps} images par seconde · {rendu ? rendu.slice(0, 42) : "rendu"}
         </div>
       )}
 
       {aide && (
-        <div style={{ position: "fixed", right: 22, bottom: 16, width: 280, background: "rgba(8,10,14,.92)", border: "1px solid #222834", padding: 12, font: "11px Helvetica", color: "#c9c2b4", lineHeight: 1.6 }}>
-          <b style={{ color: "#f0e9dc" }}>Raccourcis</b>
+        <div className="aide">
+          <b>Raccourcis</b>
           <div>Espace : clore la phase</div>
           <div>N : phase suivante</div>
           <div>R : nouvelle séance</div>
-          <div>M : masquer le panneau</div>
+          <div>M : masquer l'interface</div>
           <div>F : compteur d'images</div>
           <div>? : cette aide</div>
         </div>
@@ -170,62 +304,200 @@ export default function HostHUD({ pin, etat, connecte, son, onSon, rendu }) {
   );
 }
 
-const bouton = {
-  font: "600 10px Helvetica", letterSpacing: ".12em", textTransform: "uppercase",
-  padding: "9px 14px", background: "#c2622c", color: "#120c08", border: "none", cursor: "pointer"
-};
-const boutonGhost = {
-  font: "600 10px Helvetica", letterSpacing: ".12em", textTransform: "uppercase",
-  padding: "9px 14px", background: "transparent", color: "#c9c2b4", border: "1px solid #2b3340", cursor: "pointer"
-};
+/* ------------------------------------------------------------------ */
 
 function Debrief({ etat, fps }) {
   const fin = etat.fin;
   const d = etat.debrief;
   return (
-    <div style={{ position: "fixed", inset: 0, display: "grid", gridTemplateColumns: "1.05fr .95fr", gap: 0, background: "linear-gradient(90deg, rgba(4,6,9,.975) 0%, rgba(4,6,9,.93) 52%, rgba(4,6,9,.55) 100%)", pointerEvents: "none" }}>
-      <div style={{ padding: "34px 30px", display: "flex", flexDirection: "column" }}>
-        <div style={{ font: "9.5px Helvetica", letterSpacing: ".26em", textTransform: "uppercase", color: "#c2622c" }}>débrief · vos décisions face au réel</div>
-        <h1 style={{ font: "600 40px/1.05 Georgia, serif", margin: "10px 0 14px", color: "#f4ecdf" }}>{fin?.titre || "Fin de séance"}</h1>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <div className="debrief">
+      <style>{CSS}</style>
+      <div className="debrief-voile" />
+      <div className="debrief-gauche">
+        <div className="debrief-sur">débrief · vos décisions face au réel</div>
+        <h1 className="debrief-titre">{fin?.titre || "Fin de séance"}</h1>
+        <div className="debrief-lignes">
           {d.lignes.map((l, i) => (
-            <div key={i} onClick={() => window.dispatchEvent(new CustomEvent("feyzin:point", { detail: i }))} style={{ display: "grid", gridTemplateColumns: "64px 150px 1fr", gap: 10, borderBottom: "1px dotted #232a35", padding: "5px 0", font: "11.5px Helvetica", alignItems: "baseline", cursor: "pointer", pointerEvents: "auto" }}>
-              <span style={{ color: "#7f8b9a", fontVariantNumeric: "tabular-nums" }}>{l.heure}</span>
-              <span style={{ fontSize: 9, letterSpacing: ".05em", textTransform: "uppercase", whiteSpace: "nowrap", color: l.ecart === "maitrise" ? "#9dc3aa" : l.ecart === "conforme" ? "#c0a05a" : l.ecart === "retard" ? "#c98b5a" : "#e08b7a" }}>{l.libelle}</span>
-              <span style={{ color: "#d7d1c4" }}>{l.titre}</span>
+            <div
+              key={i}
+              className="debrief-ligne"
+              onClick={() => window.dispatchEvent(new CustomEvent("feyzin:point", { detail: i }))}
+            >
+              <span className="debrief-heure">{l.heure}</span>
+              <span
+                className="debrief-verdict"
+                style={{ color: l.ecart === "maitrise" ? "#9dc3aa" : l.ecart === "conforme" ? "#c0a05a" : l.ecart === "retard" ? "#c98b5a" : "#e08b7a" }}
+              >
+                {l.libelle}
+              </span>
+              <span className="debrief-sujet">{l.titre}</span>
             </div>
           ))}
         </div>
-        <div style={{ marginTop: "auto", paddingTop: 16, font: "12px Helvetica", color: "#c9c2b4" }}>
-          <span style={{ fontSize: 24, color: "#f4ecdf", marginRight: 8 }}>{fin?.morts ?? 0}</span><span style={{ color: "#e6dfd1" }}>morts</span>
-          <span style={{ margin: "0 10px", color: "#3a424f" }}>|</span>
-          <span style={{ fontSize: 24, color: "#f4ecdf", marginRight: 8 }}>{fin?.blesses ?? 0}</span>blessés
-          <span style={{ margin: "0 10px", color: "#3a424f" }}>|</span>
-          <span style={{ color: "#e6dfd1" }}>{fin?.tenues ?? 0}/{fin?.total ?? 0} barrières tenues</span>
+        <div className="debrief-bilan">
+          <span className="gros">{fin?.morts ?? 0}</span><span className="unite">morts</span>
+          <span className="sep" />
+          <span className="gros">{fin?.blesses ?? 0}</span><span className="unite">blessés</span>
+          <span className="sep" />
+          <span className="unite">{fin?.tenues ?? 0}/{fin?.total ?? 0} barrières tenues</span>
         </div>
       </div>
-      <div style={{ padding: "34px 26px", display: "flex", flexDirection: "column", gap: 10, justifyContent: "center" }}>
-        <div style={{ border: "1px solid #2b3340", background: "rgba(10,13,18,.92)", padding: "12px 14px" }}>
-          <div style={{ font: "9px Helvetica", letterSpacing: ".14em", textTransform: "uppercase", color: "#6f7b8a", marginBottom: 6 }}>barrières</div>
+
+      <div className="debrief-droite">
+        <div className="debrief-panneau">
+          <div className="debrief-panneau-titre">barrières</div>
           {(fin?.barrières || []).map((b) => (
-            <div key={b.nom} style={{ font: "11.5px Helvetica", color: b.tenu ? "#a7d3b5" : "#e08b7a", marginBottom: 3 }}>
-              {b.tenu ? "tenue" : "rompue"} · {b.nom}
+            <div key={b.nom} className={b.tenu ? "barriere tenue" : "barriere"}>
+              <i />{b.nom}
             </div>
           ))}
         </div>
-        <div style={{ border: "1px solid #2b3340", background: "rgba(10,13,18,.92)", padding: "12px 14px" }}>
-          <div style={{ font: "9px Helvetica", letterSpacing: ".14em", textTransform: "uppercase", color: "#6f7b8a", marginBottom: 6 }}>les décisions de la salle</div>
+        <div className="debrief-panneau">
+          <div className="debrief-panneau-titre">ce que la salle a choisi</div>
           {d.lignes.map((l, i) => (
-            <div key={i} style={{ font: "10.5px Helvetica", color: "#9aa5b3", marginBottom: 5, lineHeight: 1.35 }}>
-              <b style={{ color: "#d7d1c4" }}>{l.heure}</b> {l.choix}
-              <div style={{ color: "#9aa5b3", fontStyle: "italic", marginTop: 1 }}>{l.reel}</div>
+            <div key={i} className="debrief-choix">
+              <b>{l.heure}</b> {l.choix}
+              <em>{l.reel}</em>
             </div>
           ))}
         </div>
-        <div style={{ font: "9px Helvetica", letterSpacing: ".1em", color: "#5f6a78" }}>
-          cliquez une ligne pour replacer la caméra · {fps} images par seconde
-        </div>
+        <div className="debrief-note">cliquez une ligne pour replacer la caméra · {fps} images par seconde</div>
       </div>
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+
+const CSS = `
+  .voile-haut{position:fixed;left:0;right:0;top:0;height:200px;pointer-events:none;
+    background:linear-gradient(180deg,rgba(3,5,8,.92) 0%,rgba(3,5,8,.6) 45%,rgba(3,5,8,0) 100%)}
+  .voile-bas{position:fixed;left:0;right:0;bottom:0;height:220px;pointer-events:none;
+    background:linear-gradient(0deg,rgba(3,5,8,.94) 0%,rgba(3,5,8,.55) 45%,rgba(3,5,8,0) 100%)}
+  .progression{position:fixed;top:0;left:0;height:2px;background:#b4451f;box-shadow:0 0 12px #b4451f;transition:width .9s linear;pointer-events:none}
+
+  .entete{position:fixed;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;
+    padding:22px 30px 0;pointer-events:none;color:#ece5d8}
+  .marque{font:600 11px/1 Helvetica,Arial;letter-spacing:.34em;text-transform:uppercase;color:#e9e2d5}
+  .mention{margin-top:7px;font:9px/1 Helvetica;letter-spacing:.18em;text-transform:uppercase;color:#6d7885}
+
+  .bloc-phase{text-align:center;flex:1}
+  .phase-num{font:9px/1 Helvetica;letter-spacing:.26em;text-transform:uppercase;color:#c2622c}
+  .phase-sur{color:#5d6773;margin-left:6px}
+  .phase-titre{margin-top:7px;font:600 27px/1.05 Georgia,'Times New Roman',serif;color:#f4ecdf;text-shadow:0 2px 18px rgba(0,0,0,.8)}
+  .attente-titre{color:#d9cfbd}
+  .phase-heure{margin-top:5px;font:11px/1 Helvetica;letter-spacing:.14em;color:#8b95a2}
+
+  .bloc-droite{text-align:right;min-width:230px}
+  .compte-a-rebours{font:600 26px/1 Helvetica;letter-spacing:.04em;color:#e9e2d5;font-variant-numeric:tabular-nums}
+  .compte-a-rebours.vif{color:#e0492a;text-shadow:0 0 18px rgba(224,73,42,.55)}
+  .etat-ligne{margin-top:7px;display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap}
+  .marqueur{font:9px/1 Helvetica;letter-spacing:.12em;text-transform:uppercase;color:#7d8896}
+  .marqueur.ok{color:#9dc3aa}
+  .marqueur.alerte{color:#e08b7a}
+
+  .capteurs{position:fixed;right:30px;top:96px;width:184px;pointer-events:none}
+  .capteurs-titre{font:9px/1 Helvetica;letter-spacing:.2em;text-transform:uppercase;color:#5f6a78;margin-bottom:12px;text-align:right}
+  .cap{margin-bottom:11px}
+  .cap-haut{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .cap-label{font:9px/1 Helvetica;letter-spacing:.1em;text-transform:uppercase;color:#7f8a97}
+  .cap-val{font:600 12px/1 Helvetica;color:#e9e2d5;font-variant-numeric:tabular-nums}
+  .cap-val em{font-style:normal;font-size:9px;color:#78838f;margin-left:2px}
+  .cap-val.alerte{color:#e0492a}
+  .cap-rail{height:1px;background:rgba(255,255,255,.13);position:relative;overflow:hidden}
+  .cap-jauge{position:absolute;left:0;top:0;height:100%;background:#b4451f;transition:width .6s linear}
+  .cap-jauge.alerte{background:#e0492a;box-shadow:0 0 10px #e0492a}
+
+  .invitation{position:fixed;left:30px;bottom:104px;pointer-events:none;padding:14px 0 0}
+  .invitation:before{content:"";position:absolute;left:-30px;right:-40px;top:-24px;bottom:-70px;
+    background:radial-gradient(70% 90% at 20% 60%,rgba(3,5,8,.86) 0%,rgba(3,5,8,.5) 55%,transparent 100%);z-index:-1}
+  .invitation-corps{display:flex;align-items:flex-end;gap:26px}
+  .invitation-qr{width:104px;height:104px;display:block;opacity:.95;border:1px solid rgba(244,236,223,.2);margin-left:4px}
+  .invitation-titre{font:9.5px/1 Helvetica;letter-spacing:.22em;text-transform:uppercase;color:#7f8a97}
+  .invitation-pin{margin:8px 0 6px;font:600 66px/1 Helvetica;letter-spacing:.14em;color:#f4ecdf;text-shadow:0 0 30px rgba(180,69,31,.35)}
+  .invitation-url{font:10.5px/1 Helvetica;letter-spacing:.06em;color:#8b95a2}
+  .invitation-url span{color:#616b78}
+
+  .verdict{position:fixed;left:50%;top:46%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;animation:apparait .5s ease-out}
+  .verdict-titre{font:9px/1 Helvetica;letter-spacing:.26em;text-transform:uppercase;color:#7f8a97}
+  .verdict-lettre{margin:6px 0;font:600 78px/1 Georgia,serif;color:#f4ecdf;text-shadow:0 0 40px rgba(180,69,31,.6)}
+  .verdict-detail{display:flex;gap:14px;justify-content:center;font:11px/1 Helvetica;letter-spacing:.1em;color:#6f7a87}
+  .verdict-detail .retenu{color:#c2622c}
+
+  .pied{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-between;align-items:flex-end;
+    padding:0 30px 20px;pointer-events:none;gap:20px}
+  .equipes-titre{font:9px/1 Helvetica;letter-spacing:.2em;text-transform:uppercase;color:#78838f;margin-bottom:8px}
+  .equipes-titre span{color:#c2622c;margin-left:6px}
+  .equipes-titre .points{display:inline-flex;gap:4px;margin-left:10px;vertical-align:middle}
+  .equipes-titre .points i{width:5px;height:5px;border-radius:50%;background:#39424e;display:inline-block}
+  .equipes-titre .points i.pris{background:#c2622c;box-shadow:0 0 8px #c2622c}
+  .pied-gauche{flex:1}
+  .equipes{text-align:right}
+  .equipes-liste{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+  .poste{display:flex;align-items:center;gap:7px;font:10.5px/1 Helvetica;color:#7d8896}
+  .poste i{width:4px;height:4px;border-radius:50%;background:#39424e;display:inline-block}
+  .poste.pris{color:#d7d1c4}
+  .poste.pris i{background:#c2622c;box-shadow:0 0 8px #c2622c}
+  .poste b{margin-left:6px;font-weight:600;color:#f0e9dc}
+
+  .salle-vote{text-align:center}
+  .salle-vote-titre{font:9px/1 Helvetica;letter-spacing:.2em;text-transform:uppercase;color:#5f6a78;margin-bottom:8px}
+  .salle-vote-lignes{display:flex;gap:18px;justify-content:center}
+  .salle-vote-lignes span{position:relative;display:block;width:64px;font:9px/1 Helvetica;letter-spacing:.12em;color:#7f8a97;padding-bottom:6px}
+  .salle-vote-lignes b{display:block;margin-top:3px;font:600 16px/1 Helvetica;color:#e9e2d5}
+  .salle-vote-lignes i{position:absolute;left:0;bottom:0;height:1px;background:#b4451f;transition:width .4s ease}
+
+  .commandes{display:flex;gap:22px;align-items:center;pointer-events:auto}
+  .cmd{background:none;border:none;padding:4px 0;cursor:pointer;font:9.5px/1 Helvetica;letter-spacing:.18em;
+    text-transform:uppercase;color:#7f8a97;border-bottom:1px solid transparent}
+  .cmd:hover{color:#f0e9dc;border-bottom-color:#b4451f}
+  .cmd.fort{color:#f0e9dc;border-bottom-color:#b4451f}
+
+  .carte{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none;
+    background:radial-gradient(60% 50% at 50% 50%,rgba(3,5,8,.72) 0%,rgba(3,5,8,.2) 70%,transparent 100%);
+    animation:carte 4.2s ease-in-out forwards;text-align:center}
+  .carte-num{font:9.5px/1 Helvetica;letter-spacing:.34em;text-transform:uppercase;color:#c2622c}
+  .carte-titre{margin:14px 0 12px;font:600 52px/1.05 Georgia,serif;color:#f4ecdf;text-shadow:0 4px 40px rgba(0,0,0,.9)}
+  .carte-heure{font:11px/1 Helvetica;letter-spacing:.24em;color:#8b95a2}
+  .carte:before,.carte:after{content:"";position:absolute;left:calc(50% - 90px);width:180px;height:1px;background:rgba(194,98,44,.55)}
+  .carte:before{top:calc(50% - 78px)}
+  .carte:after{top:calc(50% + 78px)}
+
+  .compteur{position:fixed;right:30px;bottom:66px;font:600 10px/1 Helvetica;color:#9dc3aa;letter-spacing:.08em}
+  .aide{position:fixed;right:30px;bottom:86px;width:210px;padding:12px 14px;border:1px solid rgba(255,255,255,.12);
+    background:rgba(6,9,13,.9);font:11px/1.65 Helvetica;color:#c9c2b4;pointer-events:auto}
+  .aide b{display:block;margin-bottom:6px;color:#f0e9dc;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+  .discret{position:fixed;left:30px;bottom:22px;font:9.5px/1 Helvetica;letter-spacing:.2em;text-transform:uppercase;color:#5b6472}
+
+  /* débrief */
+  .debrief{position:fixed;inset:0;pointer-events:none}
+  .debrief-voile{position:absolute;inset:0;background:linear-gradient(90deg,rgba(3,5,8,.96) 0%,rgba(3,5,8,.88) 46%,rgba(3,5,8,.2) 78%,transparent 100%)}
+  .debrief-gauche{position:absolute;left:0;top:0;bottom:0;width:56%;padding:34px 0 30px 34px;box-sizing:border-box;display:flex;flex-direction:column}
+  .debrief-sur{font:9.5px/1 Helvetica;letter-spacing:.28em;text-transform:uppercase;color:#c2622c}
+  .debrief-titre{margin:12px 0 18px;font:600 42px/1.02 Georgia,serif;color:#f4ecdf}
+  .debrief-lignes{display:flex;flex-direction:column}
+  .debrief-ligne{display:grid;grid-template-columns:58px 158px 1fr;gap:12px;align-items:baseline;padding:7px 0;
+    border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer;pointer-events:auto}
+  .debrief-ligne:hover{background:rgba(194,98,44,.08)}
+  .debrief-heure{font:11.5px/1 Helvetica;color:#8b95a2;font-variant-numeric:tabular-nums}
+  .debrief-verdict{font:9px/1 Helvetica;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+  .debrief-sujet{font:12.5px/1.3 Helvetica;color:#ded7c9}
+  .debrief-bilan{margin-top:auto;padding-top:18px;display:flex;align-items:baseline;gap:8px;color:#e6dfd1}
+  .debrief-bilan .gros{font:600 26px/1 Helvetica;color:#f4ecdf;font-variant-numeric:tabular-nums}
+  .debrief-bilan .unite{font:11px/1 Helvetica;color:#b8b1a3;letter-spacing:.04em}
+  .debrief-bilan .sep{width:1px;height:16px;background:rgba(255,255,255,.16);margin:0 8px}
+  .debrief-droite{position:absolute;right:0;top:0;bottom:0;width:38%;padding:40px 30px 30px 0;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;justify-content:center}
+  .debrief-panneau{padding:12px 14px;border:1px solid rgba(255,255,255,.1);background:rgba(6,9,13,.62);backdrop-filter:blur(3px)}
+  .debrief-panneau-titre{font:9px/1 Helvetica;letter-spacing:.18em;text-transform:uppercase;color:#6f7b8a;margin-bottom:8px}
+  .barriere{display:flex;align-items:center;gap:8px;font:11px/1.5 Helvetica;color:#e08b7a}
+  .barriere i{width:5px;height:5px;border-radius:50%;background:#e08b7a;display:inline-block}
+  .barriere.tenue{color:#a7d3b5}
+  .barriere.tenue i{background:#a7d3b5}
+  .debrief-choix{font:10.5px/1.45 Helvetica;color:#9aa5b3;margin-bottom:7px}
+  .debrief-choix b{color:#d7d1c4;margin-right:4px}
+  .debrief-choix em{display:block;font-style:italic;color:#8b95a2}
+  .debrief-note{font:9px/1 Helvetica;letter-spacing:.1em;color:#5f6a78}
+
+  @keyframes carte{0%{opacity:0}12%{opacity:1}72%{opacity:1}100%{opacity:0}}
+  @keyframes apparait{from{opacity:0;transform:translate(-50%,-46%)}to{opacity:1;transform:translate(-50%,-50%)}}
+`;

@@ -22,8 +22,8 @@ function MancheAVent({ vent = [1, 0.35] }) {
       </mesh>
       <group ref={manche} position={[0, 11.6, 0]}>
         <mesh rotation={[0, 0, Math.PI / 2]}>
-          <coneGeometry args={[1.05, 4.6, 12, 1, true]} />
-          <meshStandardMaterial color="#c85a2a" side={THREE.DoubleSide} roughness={0.85} />
+          <coneGeometry args={[0.8, 3.8, 12, 1, true]} />
+          <meshStandardMaterial color="#8f4a32" side={THREE.DoubleSide} roughness={0.95} />
         </mesh>
       </group>
     </group>

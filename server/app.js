@@ -4,6 +4,7 @@
    Diffusion à 10 Hz, avec filtrage par rôle (brouillard d'information). */
 
 import http from "node:http";
+import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -152,6 +153,8 @@ function etatPublic(salle) {
     crise: resume(salle.sim),
     tension: tension(salle.sim.state, physics),
     fin,
+    /* résultat du dernier vote, pour l'afficher en surimpression de la scène */
+    dernierChoix: salle.dernierChoix || null,
     debrief: salle.etat === "debrief" ? debrief(salle.sim) : null,
     journal: salle.journal.slice(-6)
   };
@@ -215,6 +218,23 @@ export function creerServeur({ port = PORT } = {}) {
     const url = new URL(req.url, "http://x");
     let p = url.pathname === "/" ? "/index.html" : url.pathname;
 
+    /* Adresse à donner aux téléphones : quand l'animateur ouvre la page en
+       local, 127.0.0.1 ne sert à rien depuis un téléphone, on renvoie l'IP du réseau. */
+    if (p === "/adresse") {
+      let ip = null;
+      for (const cartes of Object.values(os.networkInterfaces())) {
+        for (const c of cartes || []) {
+          if (c.family === "IPv4" && !c.internal) { ip = c.address; break; }
+        }
+        if (ip) break;
+      }
+      const hote = req.headers.host || "";
+      const local = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(hote);
+      const port = hote.split(":")[1] || PORT;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ url: local && ip ? "http://" + ip + ":" + port : "http://" + hote, local: !!local }));
+      return;
+    }
     if (p === "/health") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true, salles: salles.size }));

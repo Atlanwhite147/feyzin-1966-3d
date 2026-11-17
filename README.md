@@ -25,6 +25,14 @@ c'est que le serveur n'est pas lancé.
   Le bouton « activer le son » démarre l'audio procédural ; le navigateur exige un clic, c'est normal.
 - `/play?pin=1234` : choix d'un des quatre rôles, puis scène 3D subjective et décisions en HUD.
 
+## Interface
+
+La scène 3D est le fond permanent de l'écran de salle. Tout le reste vient s'y superposer :
+titre de phase au centre, rail de capteurs à droite, code de salle et QR d'accès en bas à gauche,
+postes et commandes en bas à droite. Aucun panneau opaque : seulement des dégradés de bord et des
+filets. Une carte de phase s'affiche en fondu à chaque changement, le résultat du vote apparaît en
+surimpression, et le débrief garde la scène visible derrière la chronologie.
+
 ## Qualité et performance
 
 - Par défaut, rendu complet : ombres, Bloom, aberration chromatique, vignette, grain.
