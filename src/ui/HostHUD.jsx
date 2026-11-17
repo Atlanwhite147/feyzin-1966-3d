@@ -197,11 +197,11 @@ function Debrief({ etat, fps }) {
           ))}
         </div>
         <div style={{ marginTop: "auto", paddingTop: 16, font: "12px Helvetica", color: "#c9c2b4" }}>
-          <span style={{ fontSize: 24, color: "#f4ecdf", marginRight: 8 }}>{fin?.morts ?? 0}</span>morts
+          <span style={{ fontSize: 24, color: "#f4ecdf", marginRight: 8 }}>{fin?.morts ?? 0}</span><span style={{ color: "#e6dfd1" }}>morts</span>
           <span style={{ margin: "0 10px", color: "#3a424f" }}>|</span>
           <span style={{ fontSize: 24, color: "#f4ecdf", marginRight: 8 }}>{fin?.blesses ?? 0}</span>blessés
           <span style={{ margin: "0 10px", color: "#3a424f" }}>|</span>
-          {fin?.tenues ?? 0}/{fin?.total ?? 0} barrières tenues
+          <span style={{ color: "#e6dfd1" }}>{fin?.tenues ?? 0}/{fin?.total ?? 0} barrières tenues</span>
         </div>
       </div>
       <div style={{ padding: "34px 26px", display: "flex", flexDirection: "column", gap: 10, justifyContent: "center" }}>
@@ -217,8 +217,8 @@ function Debrief({ etat, fps }) {
           <div style={{ font: "9px Helvetica", letterSpacing: ".14em", textTransform: "uppercase", color: "#6f7b8a", marginBottom: 6 }}>les décisions de la salle</div>
           {d.lignes.map((l, i) => (
             <div key={i} style={{ font: "10.5px Helvetica", color: "#9aa5b3", marginBottom: 5, lineHeight: 1.35 }}>
-              <b style={{ color: "#d7d1c4" }}>{l.heure}</b> {l.choix.slice(0, 88)}
-              <div style={{ color: l.ecart === "conforme" ? "#8f9aa8" : "#7f8b9a", fontStyle: "italic", marginTop: 1 }}>{l.reel}</div>
+              <b style={{ color: "#d7d1c4" }}>{l.heure}</b> {l.choix}
+              <div style={{ color: "#9aa5b3", fontStyle: "italic", marginTop: 1 }}>{l.reel}</div>
             </div>
           ))}
         </div>

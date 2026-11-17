@@ -24,7 +24,7 @@ const PIEDS = Array.from({ length: 8 }, (_, i) => {
   return [Math.cos(a) * R * 0.74, Math.sin(a) * R * 0.74];
 });
 
-function Sphere({ id, x, z, chaleur, givre }) {
+function Sphere({ id, x, z, chaleur, givre, etiquette = true }) {
   const matiere = useRef();
   const vapeur = useRef();
   const couleur = useMemo(() => new THREE.Color(), []);
@@ -143,7 +143,7 @@ function Sphere({ id, x, z, chaleur, givre }) {
         <meshBasicMaterial color="#c8d6de" transparent opacity={0.06} depthWrite={false} />
       </mesh>
 
-      {id === "443" && (
+      {id === "443" && etiquette && (
         <Html center distanceFactor={110} position={[0, R + 3.6, 0]} style={{ pointerEvents: "none" }}>
           <div style={{ font: "600 12px Helvetica, Arial", letterSpacing: "2.5px", color: "#ffb08a", whiteSpace: "nowrap", textShadow: "0 0 8px #000" }}>443</div>
         </Html>
@@ -257,7 +257,7 @@ export default function Refinery({ etat }) {
       <Cuvette />
       <Annexes />
       {SPHERES.map((s) => (
-        <Sphere key={s.id} id={s.id} x={s.x} z={s.z} chaleur={bleve && s.id === "443" ? 650 : chaleur} givre={s.id === "443" ? givre : 0.25} />
+        <Sphere key={s.id} id={s.id} x={s.x} z={s.z} chaleur={bleve && s.id === "443" ? 650 : chaleur} givre={s.id === "443" ? givre : 0.25} etiquette={etat?.etat !== "debrief"} />
       ))}
     </group>
   );
